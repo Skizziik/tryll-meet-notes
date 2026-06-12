@@ -32,6 +32,24 @@ else:
     print('avatar size: patched (full-frame)')
 "
 
+# Патч 3: contentHint=detail на видеотреке камеры — кодек бережёт текст/грани логотипа
+docker exec vexa-lite python3 -c "
+import io
+p = '/app/vexa-bot/dist/services/screen-content.js'
+src = io.open(p, encoding='utf-8').read()
+if 'tryll detail' in src:
+    print('contentHint: already patched')
+else:
+    for var in ['const stream = canvas.captureStream(30);',
+                'const freshStream = canvas.captureStream(30);',
+                'const canvasStream = canvas.captureStream(30);']:
+        name = var.split('=')[0].replace('const','').strip()
+        hint = var + ' try { ' + name + '.getVideoTracks()[0].contentHint = \'detail\'; } catch (e) {} /* tryll detail */'
+        src = src.replace(var, hint)
+    io.open(p, 'w', encoding='utf-8').write(src)
+    print('contentHint: patched')
+"
+
 # перезапуск meeting-api (supervisord поднимет сам); боты подхватят патч при следующем запуске
 docker exec vexa-lite sh -c "kill \$(ps aux | grep 'meeting_api.main' | grep -v grep | awk '{print \$2}')"
 echo "meeting-api перезапускается..."
