@@ -19,13 +19,19 @@ async function vexaFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 export async function requestBot(nativeId: string): Promise<void> {
+  const body: Record<string, string> = {
+    platform: "google_meet",
+    native_meeting_id: nativeId,
+    bot_name: process.env.BOT_NAME || "Tryll Notes Bot",
+  };
+  // Логотип в виртуальной камере бота (требует патча cameraEnabled в meeting-api,
+  // см. scripts/patch-vexa-camera.sh)
+  if (process.env.BOT_AVATAR_URL) {
+    body.default_avatar_url = process.env.BOT_AVATAR_URL;
+  }
   const res = await vexaFetch("/bots", {
     method: "POST",
-    body: JSON.stringify({
-      platform: "google_meet",
-      native_meeting_id: nativeId,
-      bot_name: process.env.BOT_NAME || "Tryll Notes Bot",
-    }),
+    body: JSON.stringify(body),
   });
   // 409 = бот уже в этой встрече — для нас это успех
   if (!res.ok && res.status !== 409) {
