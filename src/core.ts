@@ -16,9 +16,19 @@ import { getTranscript, requestBot, runningBots, stopBot } from "./vexa";
 /** Шаг 1: новые созвоны из календаря → отправить бота. */
 async function dispatchBots(log: string[]): Promise<void> {
   const meetings = await upcomingMeetings();
+  if (meetings.length === 0) return;
+
+  // nativeId уже активных митов — общий мит из чужого календаря не дублируем
+  const activeNative = new Set<string>();
+  for (const id of await listActive()) {
+    const rec = await getMeeting(id);
+    if (rec) activeNative.add(rec.nativeId);
+  }
+
   for (const m of meetings) {
     const existing = await getMeeting(m.eventId);
     if (existing) continue; // уже обработан/обрабатывается
+    if (activeNative.has(m.nativeId)) continue; // бот уже в этом звонке
     const record: MeetingRecord = {
       ...m,
       platform: "google_meet",

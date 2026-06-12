@@ -6,6 +6,7 @@
 import "dotenv/config";
 import { mkdirSync, writeFileSync } from "fs";
 import { buildNotesDocx } from "../src/docx";
+import { uploadNotesDocx } from "../src/drive";
 import { generateNotesViaCli } from "../src/notes-cli";
 import { getTranscript, runningBots } from "../src/vexa";
 
@@ -56,7 +57,10 @@ async function poll(): Promise<void> {
 
   const docx = await buildNotesDocx(title, dateISO, notes, transcript);
   writeFileSync(`recordings/${name}.docx`, docx);
-  console.log(`ГОТОВО: recordings/${name}.docx`);
+  console.log(`docx собран: recordings/${name}.docx`);
+
+  const url = await uploadNotesDocx(title, name, docx);
+  console.log(`ГОТОВО, на Google Drive: ${url}`);
   process.exit(0);
 }
 

@@ -13,30 +13,65 @@ function escapeQuery(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function ensureFolder(name: string, parentId?: string): Promise<string> {
+/** нормализация для сопоставления названий: без пробелов/регистра/пунктуации */
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[\s\-_/\\.,:;]+/g, "");
+}
+
+async function getRootFolderId(): Promise<string> {
+  const byId = process.env.DRIVE_ROOT_FOLDER_ID;
+  if (byId) return byId;
+  // fallback: найти/создать папку по имени в корне Drive
+  const name = process.env.DRIVE_ROOT_FOLDER_NAME || "Tryll Meeting Notes";
   const drive = driveClient();
-  const parentClause = parentId ? ` and '${parentId}' in parents` : "";
   const res = await drive.files.list({
-    q: `name = '${escapeQuery(name)}' and mimeType = '${FOLDER_MIME}' and trashed = false${parentClause}`,
+    q: `name = '${escapeQuery(name)}' and mimeType = '${FOLDER_MIME}' and trashed = false`,
     fields: "files(id)",
     pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   const existing = res.data.files?.[0]?.id;
   if (existing) return existing;
-
   const created = await drive.files.create({
-    requestBody: {
-      name,
-      mimeType: FOLDER_MIME,
-      ...(parentId ? { parents: [parentId] } : {}),
-    },
+    requestBody: { name, mimeType: FOLDER_MIME },
     fields: "id",
+    supportsAllDrives: true,
   });
   return created.data.id!;
 }
 
 /**
- * Кладёт .docx в "<DRIVE_ROOT_FOLDER_NAME>/<seriesName>/<fileName>.docx".
+ * Подпапка для серии митов внутри корня:
+ * 1) ищем существующую папку, чьё имя «похоже» на название серии
+ *    (нормализованное вхождение в обе стороны: "n8n" ⊂ "n8n Progon / Sync", "SyncTryll" ≈ "Sync Tryll");
+ * 2) иначе создаём папку с именем серии.
+ */
+async function ensureSeriesFolder(rootId: string, seriesName: string): Promise<string> {
+  const drive = driveClient();
+  const res = await drive.files.list({
+    q: `'${rootId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+    fields: "files(id, name)",
+    pageSize: 100,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const series = norm(seriesName);
+  for (const f of res.data.files ?? []) {
+    const folder = norm(f.name ?? "");
+    if (!folder) continue;
+    if (series.includes(folder) || folder.includes(series)) return f.id!;
+  }
+  const created = await drive.files.create({
+    requestBody: { name: seriesName, mimeType: FOLDER_MIME, parents: [rootId] },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  return created.data.id!;
+}
+
+/**
+ * Кладёт .docx в "<корень>/<папка серии>/<fileName>.docx".
  * Возвращает webViewLink документа.
  */
 export async function uploadNotesDocx(
@@ -44,9 +79,8 @@ export async function uploadNotesDocx(
   fileName: string,
   docx: Buffer,
 ): Promise<string> {
-  const rootName = process.env.DRIVE_ROOT_FOLDER_NAME || "Tryll Meeting Notes";
-  const rootId = await ensureFolder(rootName);
-  const seriesId = await ensureFolder(seriesName, rootId);
+  const rootId = await getRootFolderId();
+  const seriesId = await ensureSeriesFolder(rootId, seriesName);
 
   const drive = driveClient();
   const res = await drive.files.create({
@@ -60,6 +94,7 @@ export async function uploadNotesDocx(
       body: Readable.from(docx),
     },
     fields: "id, webViewLink",
+    supportsAllDrives: true,
   });
   return res.data.webViewLink ?? `https://drive.google.com/file/d/${res.data.id}/view`;
 }
