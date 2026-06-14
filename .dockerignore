@@ -1,0 +1,8 @@
+node_modules/
+recordings/
+.git/
+.env
+.vercel/
+*.log
+dist/
+assets/

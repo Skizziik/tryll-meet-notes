@@ -1,0 +1,22 @@
+# Раннер-контейнер. Поднимается автоматически при старте Docker (restart unless-stopped),
+# живёт в той же сети, что Vexa, поэтому ходит к ней по имени контейнера vexa-lite.
+#
+# Запуск/обновление:  docker compose up -d --build
+# Логи:               docker logs -f tryll-runner
+# Остановить:         docker compose down
+services:
+  runner:
+    build: .
+    image: tryll-runner
+    container_name: tryll-runner
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # внутри docker-сети Vexa доступна по имени контейнера, а не localhost
+      VEXA_BASE_URL: http://vexa-lite:8056
+    networks:
+      - vexa-network
+
+networks:
+  vexa-network:
+    external: true
