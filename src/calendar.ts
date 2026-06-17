@@ -91,6 +91,9 @@ export async function upcomingMeetings(
     const attendees = (ev.attendees ?? [])
       .map((a) => a.email ?? "")
       .filter((e) => e && !e.endsWith(".calendar.google.com")); // исключаем room-ресурсы
+    // организатор тоже получает письмо (важно для соло-митов без приглашённых)
+    if (ev.organizer?.email) attendees.push(ev.organizer.email);
+    if (ev.creator?.email) attendees.push(ev.creator.email);
     out.push({
       eventId: ev.id,
       title,
