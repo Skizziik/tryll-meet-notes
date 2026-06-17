@@ -15,5 +15,6 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 COPY scripts ./scripts
+COPY assets ./assets
 
 CMD ["npx", "tsx", "scripts/local.ts"]

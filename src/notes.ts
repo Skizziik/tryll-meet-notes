@@ -4,6 +4,8 @@ export interface MeetingNotes {
   language: string;
   /** Краткое английское название мита — ВСЕГДА на английском, для имени файла и темы письма */
   title_en: string;
+  /** TL;DR ВСЕГДА на английском — для письма-карточки (документ остаётся на языке мита) */
+  tldr_en: string[];
   tldr: string[];
   decisions: string[];
   action_items: Array<{ owner: string; task: string; due: string }>;

@@ -24,7 +24,7 @@ export async function finalizeMeeting(
     try {
       const recipients = filterDomainRecipients(m.attendees ?? []);
       if (recipients.length > 0) {
-        await sendNotesEmail(recipients, titleEn, m.startISO, url);
+        await sendNotesEmail(recipients, titleEn, m.startISO, url, notes.tldr_en);
       }
     } catch (e) {
       console.error(`notes email failed (non-fatal): ${e}`);

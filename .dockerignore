@@ -5,4 +5,3 @@ recordings/
 .vercel/
 *.log
 dist/
-assets/
