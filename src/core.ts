@@ -141,6 +141,10 @@ async function collectFinished(log: string[], running: Map<string, number>): Pro
       }
 
       const lastAudioMs = running.get(m.nativeId) ?? 0;
+      if (lastAudioMs > 0 && !m.everHadAudio) {
+        m.everHadAudio = true; // бот реально писал аудио → не «упал на старте»
+        changed = true;
+      }
       const audioStale = lastAudioMs > 0 && now - lastAudioMs > GHOST_NO_AUDIO_MS; // бот-призрак
       const hardCap = now > startMs + HARD_MAX_MS; // дальний предохранитель
       if (audioStale || hardCap) {
@@ -176,9 +180,11 @@ async function collectFinished(log: string[], running: Map<string, number>): Pro
 
     // транскрипт стабилен (Whisper доделал) либо вышел потолок грейса — собираем
     if (!tr) {
-      // Бот ни разу не появлялся в running и транскрипта нет → почти наверняка
-      // упал на старте (гонка Chrome/Xvfb). Переотправляем, пока мит не кончился.
-      if (!m.botSeenRunning && (m.launchRetries ?? 0) < MAX_LAUNCH_RETRIES && now < endMs) {
+      // Бот ни разу не дал аудио и транскрипта нет → почти наверняка упал на
+      // старте (гонка Chrome/Xvfb). Переотправляем, пока мит не кончился.
+      // (Аудио — надёжнее «running»: упавший контейнер Vexa на миг метит running,
+      // а аудио-чанков у него нет; живой бот пишет аудио даже в тишине.)
+      if (!m.everHadAudio && (m.launchRetries ?? 0) < MAX_LAUNCH_RETRIES && now < endMs) {
         try {
           await requestBot(m.nativeId);
           m.launchRetries = (m.launchRetries ?? 0) + 1;
