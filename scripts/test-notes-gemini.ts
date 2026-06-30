@@ -5,22 +5,21 @@
  *   docker exec tryll-runner npx tsx scripts/test-notes-gemini.ts [nativeId]
  */
 import "dotenv/config";
+import { readFileSync } from "fs";
 import { getTranscript } from "../src/vexa";
-import { getMeeting, listActive, listPending } from "../src/store";
 import { generateGeminiNotesViaCli } from "../src/notes-gemini";
 import { createGeminiDoc } from "../src/gdocs";
 import { sendNotesEmail } from "../src/email";
 
 const ONLY = "maksim.makevich@tryllengine.com";
 
-async function findRecord(nativeId: string) {
-  // ищем запись по nativeId в active+pending+по eventId напрямую не выйдет —
-  // просто пробежимся по известным наборам, иначе вернём минимум
-  for (const eid of [...(await listActive()), ...(await listPending())]) {
-    const m = await getMeeting(eid);
-    if (m?.nativeId === nativeId) return m;
+function findRecord(nativeId: string): any {
+  try {
+    const d = JSON.parse(readFileSync(process.env.STORE_FILE || "/data/store.json", "utf-8"));
+    return Object.values(d.meetings || {}).find((m: any) => m.nativeId === nativeId) || null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 async function main() {
@@ -39,7 +38,7 @@ async function main() {
   const attendees = [...new Set(rec?.attendees || [])];
 
   console.log("генерю заметки (англ, gemini-структура)…");
-  const notes = await generateGeminiNotesViaCli(title, dateISO, transcript);
+  const notes = await generateGeminiNotesViaCli(title, dateISO, transcript, attendees);
   console.log(`секций summary: ${notes.summary_sections?.length}, decisions: ${(notes.decisions_aligned?.length||0)+(notes.decisions_open?.length||0)}, next: ${notes.next_steps?.length}, details: ${notes.details?.length}`);
 
   console.log("создаю Google Doc…");

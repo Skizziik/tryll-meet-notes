@@ -253,8 +253,10 @@ async function processPending(log: string[]): Promise<void> {
     if (m.status !== "awaiting_notes" || !m.transcript) continue;
     try {
       if (!m.noteDocUrl) {
-        // англ. заметки 1:1 в стиле Gemini → нативный Google Doc (Docs API)
-        const notes = await generateGeminiNotesViaCli(m.title, m.startISO, m.transcript);
+        // англ. заметки 1:1 в стиле Gemini → нативный Google Doc (Docs API).
+        // Передаём реальный список участников из инвайта — чтобы суммаризатор
+        // сводил спикеров к ним и не плодил фантомных людей (как «Anya»).
+        const notes = await generateGeminiNotesViaCli(m.title, m.startISO, m.transcript, [...new Set(m.attendees ?? [])]);
         await uploadNotes(m, notes); // ставит noteDocUrl/titleEn/tldrEn, сохраняет
       }
       if (process.env.NOTES_EMAIL === "true" && !m.emailedAt) {

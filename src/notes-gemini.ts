@@ -46,7 +46,8 @@ Rules:
 - next_steps: concrete action items with an owner. Owner is a person's name from the transcript (or "The group").
 - details: one bullet per distinct discussion topic, in chronological-ish order, like Gemini's "Details" section.
 - Everything in English. Keep proper names/brands as-is.
-- A CONTEXT block (company & team) is provided below ONLY to spell names/roles correctly and understand terms. Base ALL notes strictly on the transcript — never add facts that weren't said. Note: a participant literally named "Tryll Engine" is the recording bot, not a person — ignore it / never treat it as a speaker.`;
+- A CONTEXT block (company & team) is provided below ONLY to spell names/roles correctly and understand terms. Base ALL notes strictly on the transcript — never add facts that weren't said. Note: a participant literally named "Tryll Engine" is the recording bot, not a person — ignore it / never treat it as a speaker.
+- A PARTICIPANTS list (from the calendar invite) is provided — these are the ONLY people in the meeting. The transcript's speaker labels come from imperfect diarization and may be WRONG or SPLIT (one real person shown as two speakers, e.g. their name + "Tryll Engine"). Reconcile EVERY speaker to someone on the participants list. NEVER invent a participant and NEVER assign a next-step to a name that isn't on the list. If a name is spoken but not on the list, it's a person being discussed (a mention), not an attendee — don't attribute tasks to them.`;
 
 function runClaude(stdinText: string, timeoutMs: number): Promise<string> {
   const model = process.env.NOTES_CLI_MODEL || "sonnet";
@@ -85,8 +86,10 @@ export async function generateGeminiNotesViaCli(
   title: string,
   dateISO: string,
   transcript: string,
+  attendees: string[] = [],
 ): Promise<GeminiNotes> {
-  const prompt = `${INSTRUCTION}\n\n=== CONTEXT (reference only) ===\n${TEAM_CONTEXT}\n\n=== MEETING ===\nMeeting: «${title}», date: ${dateISO.slice(0, 10)}.\n\nTranscript (format "Name: line"):\n\n${transcript}`;
+  const people = attendees.length ? attendees.join(", ") : "(not provided)";
+  const prompt = `${INSTRUCTION}\n\n=== CONTEXT (reference only) ===\n${TEAM_CONTEXT}\n\n=== PARTICIPANTS (calendar invite — the ONLY people in this meeting) ===\n${people}\n\n=== MEETING ===\nMeeting: «${title}», date: ${dateISO.slice(0, 10)}.\n\nTranscript (format "Name: line"; speaker labels may be wrong/split — reconcile to participants):\n\n${transcript}`;
   const raw = await runClaude(prompt, 10 * 60_000);
   const idx = raw.indexOf('{"type":"result"');
   const jsonStart = idx >= 0 ? idx : raw.indexOf("{");
