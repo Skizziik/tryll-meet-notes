@@ -2,8 +2,8 @@
 // Изолирован: читает store.json раннера ТОЛЬКО на чтение + Google Calendar.
 // Раннер/боты/vexa не модифицирует (управление = прямые вызовы Vexa REST).
 import { createServer } from "http";
-import { readFile, readFileSync } from "fs";
-import { extname, join } from "path";
+import { readFile, readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { dirname, extname, join } from "path";
 import { fileURLToPath } from "url";
 import { google } from "googleapis";
 
@@ -37,6 +37,17 @@ function meetCode(ev) {
     if (m) return m[1];
   }
   return null;
+}
+
+const SKIP_FILE = process.env.SKIP_FILE || "/cmd/skip.json";
+/** Скип-лист «бота не впускать» (общий с раннером файл). Объект eventId→{...}. */
+function readSkip() {
+  try { return JSON.parse(readFileSync(SKIP_FILE, "utf-8")) || {}; } catch { return {}; }
+}
+function writeSkip(obj) {
+  const dir = dirname(SKIP_FILE);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(SKIP_FILE, JSON.stringify(obj), "utf-8");
 }
 
 /** Читаем store.json раннера на чтение. Никогда не пишем. */
@@ -91,6 +102,7 @@ async function getMeetings(fromISO, toISO) {
     }
   }
   const byEvent = readStore(); // ключ = eventId (уникален для каждой даты/повтора)
+  const skip = readSkip();
   const live = await liveBots();
   const now = Date.now();
 
@@ -107,6 +119,7 @@ async function getMeetings(fromISO, toISO) {
     const sMs = Date.parse(ev.start.dateTime), eMs = Date.parse(ev.end.dateTime);
     const happening = now >= sMs - 5 * 60000 && now <= eMs + 30 * 60000;
     const isLive = !!(code && happening && live.has(code)); // «идёт» только в окне мита
+    const manualSkip = !!skip[ev.id];
     const attendees = (ev.attendees ?? [])
       .map((a) => a.email || "")
       .filter((e) => e && !e.endsWith(".calendar.google.com"));
@@ -122,7 +135,8 @@ async function getMeetings(fromISO, toISO) {
       organizer,
       externalOrganizer: !!external,
       attendees,
-      botStatus: botStatus(rec, isLive),
+      botStatus: manualSkip ? "skipped" : botStatus(rec, isLive),
+      manualSkip,
       noteUrl: rec?.noteDocUrl || null,
       error: rec?.error || null,
       hasTranscript: !!(rec?.transcript),
@@ -194,6 +208,19 @@ createServer(async (req, res) => {
       const r = await redispatch(code);
       res.writeHead(r.ok ? 200 : 500, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(r));
+    }
+    if (url.pathname === "/api/skip" && req.method === "POST") {
+      const { eventId, nativeId, title, code, on } = JSON.parse((await body(req)) || "{}");
+      const s = readSkip();
+      if (on) {
+        s[eventId] = { nativeId: nativeId || null, title: title || "", ts: new Date().toISOString() };
+        if (code) { try { await fetch(`${VEXA_BASE}/bots/google_meet/${code}`, { method: "DELETE", headers: { "X-API-Key": VEXA_KEY } }); } catch {} }
+      } else {
+        delete s[eventId];
+      }
+      writeSkip(s);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ ok: true, on: !!on }));
     }
     // static
     let p = url.pathname === "/" ? "/index.html" : url.pathname;

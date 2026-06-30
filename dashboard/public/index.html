@@ -202,6 +202,7 @@ async function openDrawer(id){
       ${e.meetUrl?`<a href="${e.meetUrl}" target="_blank"><button>🎥 Открыть Meet</button></a>`:""}
       ${e.meetCode?`<button onclick="viewTranscript('${e.meetCode}')">📝 Транскрипт</button>`:""}
       ${e.meetCode?`<button onclick="resend('${e.meetCode}',this)">🤖 Переотправить бота</button>`:""}
+      <button onclick="toggleSkip('${e.id}',this)">${e.manualSkip?'✅ Вернуть бота':'🚫 Бота не впускать'}</button>
     </div>
     <div id="trbox"></div>`;
   document.getElementById("ov").classList.add("open");
@@ -212,6 +213,15 @@ async function viewTranscript(code){
   const box=document.getElementById("trbox");box.innerHTML='<div class="spin">загрузка транскрипта…</div>';
   const r=await fetch(`/api/transcript?code=${code}`);const d=await r.json();
   box.innerHTML=d.transcript?`<pre class="tr">${esc(d.transcript)}</pre>`:'<div class="spin" style="margin-top:8px">транскрипта нет</div>';
+}
+async function toggleSkip(id,btn){
+  const e=cache.find(x=>x.id===id);if(!e)return;
+  const on=!e.manualSkip;
+  btn.disabled=true;btn.textContent="…";
+  try{
+    await fetch("/api/skip",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({eventId:e.id,nativeId:e.meetCode,code:e.meetCode,title:e.title,on})});
+    await load();draw();openDrawer(id); // обновить статус + перерисовать панель
+  }catch(err){btn.disabled=false;btn.textContent="ошибка"}
 }
 async function resend(code,btn){
   btn.disabled=true;btn.textContent="отправляю…";

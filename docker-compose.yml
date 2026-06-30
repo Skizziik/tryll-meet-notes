@@ -17,8 +17,10 @@ services:
       # персистентный стор обработанных митов (переживает рестарт/пересборку),
       # иначе бот возвращается на мит после кика
       STORE_FILE: /data/store.json
+      SKIP_FILE: /cmd/skip.json
     volumes:
       - runner-data:/data
+      - tryll-cmd:/cmd
     networks:
       - vexa-network
 
@@ -35,8 +37,10 @@ services:
       VEXA_BASE_URL: http://vexa-lite:8056
       STORE_FILE: /data/store.json
       DASHBOARD_PORT: 8090
+      SKIP_FILE: /cmd/skip.json
     volumes:
       - runner-data:/data:ro
+      - tryll-cmd:/cmd
     ports:
       - "8090:8090"
     networks:
@@ -44,6 +48,7 @@ services:
 
 volumes:
   runner-data:
+  tryll-cmd:
 
 networks:
   vexa-network:

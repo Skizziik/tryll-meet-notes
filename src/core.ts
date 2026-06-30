@@ -1,3 +1,4 @@
+import { readFileSync } from "fs";
 import { upcomingMeetings } from "./calendar";
 import { emailNotes, uploadNotes } from "./finalize";
 import { generateGeminiNotesViaCli } from "./notes-gemini";
@@ -40,6 +41,18 @@ console.log(`runner проснулся: ${new Date(RUNNER_STARTED_AT).toISOStrin
 
 const nowISO = () => new Date().toISOString();
 
+// Скип-лист из дашборда (общий volume): eventId'ы митов, на которые бот НЕ нужен.
+// Дашборд пишет /cmd/skip.json, раннер читает каждый тик. Нет файла → пусто.
+const SKIP_FILE = process.env.SKIP_FILE || "/cmd/skip.json";
+function readSkip(): Set<string> {
+  try {
+    const d = JSON.parse(readFileSync(SKIP_FILE, "utf-8"));
+    return new Set(Object.keys(d || {}));
+  } catch {
+    return new Set();
+  }
+}
+
 /** Транскрипт без падения тика: Vexa моргнула → null, попробуем в следующий раз. */
 async function safeTranscript(nativeId: string): Promise<string | null> {
   try {
@@ -60,13 +73,14 @@ async function usedSlots(running: Map<string, number>): Promise<Set<string>> {
 }
 
 /** Шаг 1: новые созвоны из календаря → отправить бота (не больше MAX_CONCURRENT). */
-async function dispatchBots(log: string[], running: Map<string, number>): Promise<void> {
+async function dispatchBots(log: string[], running: Map<string, number>, skip: Set<string>): Promise<void> {
   const meetings = await upcomingMeetings();
   if (meetings.length === 0) return;
   const used = await usedSlots(running);
 
   for (const m of meetings) {
     if (await getMeeting(m.eventId)) continue; // уже обработан/обрабатывается
+    if (skip.has(m.eventId)) continue; // помечен «бота не впускать» (можно вернуть — запись не сохраняем)
     // Пробуждение раннера: мит уже шёл ДО старта раннера и идёт дольше порога →
     // не заходим (бот пришёл бы под конец). Помечаем skipped, чтобы не дёргать
     // повторно. Нормальные миты (начались после старта раннера) сюда не попадают.
@@ -106,11 +120,23 @@ async function dispatchBots(log: string[], running: Map<string, number>): Promis
  * Замер/конец/кик/призрак → добиваем бота (если надо) и забираем транскрипт.
  * Гарантия отсутствия ботов-призраков: слот всегда освобождается.
  */
-async function collectFinished(log: string[], running: Map<string, number>): Promise<void> {
+async function collectFinished(log: string[], running: Map<string, number>, skip: Set<string>): Promise<void> {
   for (const eventId of await listActive()) {
     const m = await getMeeting(eventId);
     if (!m) {
       await unmarkActive(eventId);
+      continue;
+    }
+    // в дашборде нажали «бота не впускать» уже после отправки → выгнать и закрыть без заметок
+    if (skip.has(eventId)) {
+      if (running.has(m.nativeId)) {
+        try { await stopBot(m.nativeId); } catch { /* уже нет */ }
+      }
+      m.status = "skipped";
+      m.error = "снят вручную из дашборда";
+      await saveMeeting(m);
+      await unmarkActive(eventId);
+      log.push(`manual skip → выгнан: ${m.title}`);
       continue;
     }
     const now = Date.now();
@@ -249,7 +275,8 @@ async function processPending(log: string[]): Promise<void> {
 /** Один тик оркестратора: отправить ботов + собрать завершённые + дожать заметки. */
 export async function runTick(log: string[]): Promise<void> {
   const running = await runningBots();
-  await dispatchBots(log, running);
-  await collectFinished(log, running);
+  const skip = readSkip(); // миты, помеченные в дашборде «бота не впускать»
+  await dispatchBots(log, running, skip);
+  await collectFinished(log, running, skip);
   await processPending(log);
 }
