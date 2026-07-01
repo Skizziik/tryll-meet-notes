@@ -21,6 +21,7 @@ docker run -d --name vexa-lite \
   -p 3000:3000 -p 8056:8056 -p 8057:8057 \
   --shm-size=2g \
   --env-file vexa.env \
+  --env-file scripts/vexa-image/.vexa-secret.env \
   -v vexa-lite-recordings:/var/lib/vexa/recordings \
   -v vexa-master-profile:/master-profile \
   tryll-vexa-lite:latest
